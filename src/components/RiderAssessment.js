@@ -42,7 +42,7 @@ const RiderAssessment = ({ formData, handleFormChange, onNext, onPrevious }) => 
       <h1 className='main-heading'>TWO WHEELER RIDE ALONG FORM</h1>
       <NavigationSteps currentStep="riderAssessment" />
       <div className="watermark">
-        <img src={watermark} alt="Watermark" />
+        <img src={watermark.src} alt="Watermark" />
       </div>
       <form>
         {questions.map((question, index) => (

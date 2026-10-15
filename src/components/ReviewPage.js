@@ -19,7 +19,7 @@ const ReviewPage = ({ formData, onNext, onPrevious }) => {
   };
 
   const submitToGoogleSheets = async (formData) => {
-    const url = 'https://ridealongbackend.onrender.com/submit-to-sheets'; // URL of your Express backend
+    const url = '/api/submit-to-sheets'; // This app's own API route (app/api/submit-to-sheets/route.js), formerly the Render backend
     
     try {
       const response = await fetch(url, {

@@ -5,7 +5,7 @@ import './ThankYou.css'; // Import the CSS for styling
 const ThankYou = () => {
   return (
     <div className="image-page-container">
-      <img src={thankYou} alt="Thank You" className="center-image" />
+      <img src={thankYou.src} alt="Thank You" className="center-image" />
     </div>
   );
 };

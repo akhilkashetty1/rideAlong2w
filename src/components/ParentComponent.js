@@ -1,8 +1,10 @@
+"use client";
+
 // src/components/ParentComponent.js
 
 import React, { useState } from 'react';
-import Page1 from '../pages/page1';
-import Page2 from '../pages/page2';
+import Page1 from './page1';
+import Page2 from './page2';
 import RiderGuidelines from './riderGuidelines';
 import RiderAssessment from './RiderAssessment'; 
 import VehicleAssessment from './VehicleAssessment';

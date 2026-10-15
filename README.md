@@ -1,70 +1,63 @@
-# Getting Started with Create React App
+# Two Wheeler Ride Along Form
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+Line-manager ride-along assessment for **two wheelers** ([ride-along-form.in](https://ride-along-form.in)).
+Sibling of the 4W form ([rideAlong4w](https://github.com/akhilkashetty1/rideAlong4w)) and RoadShield, and built the same way:
+**one Next.js app on Vercel, frontend and backend together.** No separate server, no Render.
 
-## Available Scripts
+## Tech stack
 
-In the project directory, you can run:
+| | |
+|---|---|
+| Framework | Next.js 16 (App Router), React 19 |
+| Form screens | `src/components/*`, the original screens and CSS, unchanged |
+| Backend | `app/api/submit-to-sheets/route.js` (was the Express server on Render) |
+| Saves to | Google Sheet (Apps Script) + submissions hub (database + admin), Brevo email |
+| Hosting | Vercel |
 
-### `npm start`
+## Local development
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+```bash
+npm install
+npm run dev      # http://localhost:3000
+```
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+## Environment variables
 
-### `npm test`
+All are optional. With none set, the form writes to the same Google Sheet the Render
+backend used, so behaviour is unchanged. See `.env.example`.
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+| Variable | Purpose |
+|---|---|
+| `GOOGLE_SHEET_WEBAPP_URL` | Apps Script Web App (defaults to the existing Sheet) |
+| `BREVO_API_KEY` | Notification email; without it no email is sent. **Use a new key.** |
+| `BREVO_SENDER_EMAIL` / `BREVO_SENDER_NAME` / `ADMIN_EMAIL_PRIMARY` / `ADMIN_EMAIL_CC` | Email addresses (default to the previous ones) |
+| `HUB_INGEST_URL` / `HUB_INGEST_KEY` | Submissions hub: `https://<hub-domain>/api/ingest/2w` and the hub's `INGEST_KEY_2W` |
 
-### `npm run build`
+## How a submission is saved
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+The review page posts the form to `/api/submit-to-sheets`. The route writes to the Sheet
+and the hub **in parallel** and sends the email. The entry counts as saved if **either** the
+Sheet or the hub accepted it, so one service being down no longer loses data.
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+## Project structure
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+```
+app/
+  layout.js, page.js          Next.js shell around the original form
+  api/submit-to-sheets/       the backend (Sheet + hub + email)
+src/
+  App.js
+  components/                 the form screens and their CSS (formerly src/pages)
+  assets/                     cover, thank-you and watermark images
+public/Favicon.ico
+```
 
-### `npm run eject`
+`src/pages` was renamed to `src/components` because Next.js reserves a `pages` folder for routes.
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+## Deploying
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
-
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
-
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
-
-## Learn More
-
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
-
-### Code Splitting
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
-
-### Analyzing the Bundle Size
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+1. Import this repo into Vercel (framework auto-detected as Next.js) and add the env vars.
+2. Check the Vercel preview URL end to end.
+3. In Vercel → Settings → Domains, add `ride-along-form.in` and update the DNS records
+   as Vercel shows. Until DNS switches, the old GitHub Pages site + Render keep working.
+4. After the domain is live on Vercel, the Render service (`rideAlongBackend`) can be shut down.

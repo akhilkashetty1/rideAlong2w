@@ -71,7 +71,7 @@ const Page2 = ({ onNext, onPrevious }) => {
 
   return (
     <div className="page2-container">
-      <img src={waterMark} alt="Watermark" className="watermark" />  
+      <img src={waterMark.src} alt="Watermark" className="watermark" />  
       <h1 className="form-heading">VEHICLE ASSESSMENT GUIDELINES</h1>
       <table className="assessment-table">
         <thead>

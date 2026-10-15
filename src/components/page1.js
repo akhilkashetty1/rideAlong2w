@@ -5,7 +5,7 @@ import './page1.css';
 const Page1 = ({ onNext }) => {
   return (
     <div className="page1-container">
-      <img src={mainPage} alt="Placeholder" className="center-image" />
+      <img src={mainPage.src} alt="Placeholder" className="center-image" />
       <button 
         className="start-assignment-btn" 
         onClick={onNext}

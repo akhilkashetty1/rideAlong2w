@@ -80,7 +80,7 @@ const VehicleAssessment = ({ formData, handleFormChange, onNext, onPrevious }) =
       </div> */}
 
       <div className="watermark">
-        <img src={watermark} alt="Watermark" />
+        <img src={watermark.src} alt="Watermark" />
       </div>
       <form>
         <div className="input-container">

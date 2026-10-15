@@ -158,7 +158,7 @@ const VehicleDetails = ({ formData, handleFormChange, onNext, onPrevious }) => {
       <h1 className='main-heading'>TWO WHEELER RIDE ALONG FORM</h1>
       <NavigationSteps currentStep="vehicleDetails" />
       <div className="watermark">
-        <img src={watermark} alt="Watermark" />
+        <img src={watermark.src} alt="Watermark" />
       </div>
 
       <form>
