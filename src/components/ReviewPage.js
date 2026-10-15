@@ -1,6 +1,6 @@
 import React, { useRef } from 'react';
 import './ReviewPage.css';
-import jsPDF from 'jspdf'; // Library for generating PDFs
+import { jsPDF } from 'jspdf'; // Library for generating PDFs (named export works in both the browser and server builds)
 
 const ReviewPage = ({ formData, onNext, onPrevious }) => {
   const reviewRef = useRef(); // Ref to target the review content for printing/PDF
