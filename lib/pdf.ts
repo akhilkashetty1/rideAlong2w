@@ -47,7 +47,8 @@ export async function downloadReportPdf(report: ReportSection[], fileName: strin
     for (const row of section.rows) {
       const labelLines = doc.splitTextToSize(row.label, (W - 2 * M) * 0.62);
       const remarkLines = row.remark ? doc.splitTextToSize(`Remarks: ${row.remark}`, W - 2 * M - 4) : [];
-      const h = Math.max(labelLines.length, 1) * 4.6 + remarkLines.length * 4.3 + 3;
+      const extraLines = (row.extras ?? []).map((x) => `${x.label}: ${x.value}`);
+      const h = Math.max(labelLines.length, 1) * 4.6 + (remarkLines.length + extraLines.length) * 4.3 + 3;
       ensure(h);
       doc.setFont("helvetica", "normal");
       doc.setFontSize(9.5);
@@ -57,6 +58,13 @@ export async function downloadReportPdf(report: ReportSection[], fileName: strin
       if (row.flagged) doc.setTextColor(255, 0, 0);
       doc.text(row.flagged ? `${row.value}  (flagged)` : row.value, W - M - 2, y, { align: "right" });
       y += labelLines.length * 4.6;
+      if (extraLines.length) {
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(8.5);
+        doc.setTextColor(0, 0, 0);
+        doc.text(extraLines, M + 4, y);
+        y += extraLines.length * 4.3;
+      }
       if (remarkLines.length) {
         doc.setFont("helvetica", "italic");
         doc.setFontSize(8.5);

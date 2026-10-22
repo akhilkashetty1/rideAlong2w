@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useState } from "react";
-import { Info, TriangleAlert } from "lucide-react";
+import { CalendarCheck, Info, TriangleAlert } from "lucide-react";
 import { FORM_META, type FieldDef, type Question, type YesNo } from "@/lib/form-content";
 import { fieldOptions, type Answer } from "@/lib/submission";
 import { cn } from "@/lib/utils";
@@ -110,6 +110,9 @@ export function QuestionRow({
   onActivate,
   onAnswer,
   onRemark,
+  onDetail,
+  detailErrors,
+  today,
 }: {
   /** `${sectionId}.${questionId}`: rows are found by it for the walkaround bike and the rider route. */
   qkey: string;
@@ -121,18 +124,25 @@ export function QuestionRow({
   error?: string;
   onAnswer: (v: YesNo) => void;
   onRemark: (v: string) => void;
+  /** Follow-up details (e.g. valid-till dates), when the question asks for them. */
+  onDetail?: (fieldId: string, v: string) => void;
+  detailErrors?: Record<string, string | undefined>;
+  /** Today as YYYY-MM-DD, the earliest valid-till date. */
+  today?: string;
 }) {
   const [showGuide, setShowGuide] = useState(false);
   const groupId = useId();
   const expected = question.expected ?? "Yes";
   const flagged = !!answer?.answer && answer.answer !== expected;
   const remark = answer?.remark ?? "";
+  const followUp = question.followUp && answer?.answer === question.followUp.when ? question.followUp : null;
+  const detailError = followUp?.fields.some((f) => detailErrors?.[f.id]);
 
   return (
     <div
       id={`q-${qkey}`}
       data-qkey={qkey}
-      data-error={error ? "true" : undefined}
+      data-error={error || detailError ? "true" : undefined}
       onFocusCapture={onActivate}
       onPointerDown={onActivate}
       className={cn(
@@ -140,7 +150,7 @@ export function QuestionRow({
         flagged ? "border-brake shadow-[inset_4px_0_0_var(--color-brake)]" : "border-line",
         active && !flagged && "border-black shadow-[0_0_0_3px_rgba(206,219,40,.7)]",
         active && flagged && "shadow-[inset_4px_0_0_var(--color-brake),0_0_0_3px_rgba(255,0,0,.25)]",
-        error && "border-brake",
+        (error || detailError) && "border-brake",
         !answer?.answer && !error && "border-dashed",
       )}
     >
@@ -191,6 +201,39 @@ export function QuestionRow({
           })}
         </div>
       </div>
+
+      {followUp && (
+        <div className="step-in ml-10 mt-3 rounded-lg border border-black bg-neon/25 p-3">
+          <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-black">
+            <CalendarCheck className="h-3.5 w-3.5" /> Valid till: pick the date printed on each document
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {followUp.fields.map((f) => {
+              const fid = `${groupId}-${f.id}`;
+              const err = detailErrors?.[f.id];
+              return (
+                <div key={f.id}>
+                  <label htmlFor={fid} className={labelClass}>
+                    {f.label}
+                    <span className="text-brake"> *</span>
+                  </label>
+                  <input
+                    id={fid}
+                    type="date"
+                    value={answer?.details?.[f.id] ?? ""}
+                    min={today}
+                    onChange={(e) => onDetail?.(f.id, e.target.value)}
+                    aria-invalid={!!err}
+                    aria-describedby={err ? `${fid}-err` : undefined}
+                    className={cn(inputClass, "bg-white")}
+                  />
+                  <ErrorText id={`${fid}-err`}>{err}</ErrorText>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="mt-3 pl-10">
         {flagged && (

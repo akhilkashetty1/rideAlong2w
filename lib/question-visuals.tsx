@@ -15,6 +15,7 @@ import {
   CircleDot,
   Disc3,
   EyeOff,
+  FileCheck,
   FlipHorizontal2,
   Footprints,
   Fuel,
@@ -79,4 +80,5 @@ export const QUESTION_VISUALS: Record<string, { icon: IconComponent; part?: Bike
   "rider.helmet-condition": { icon: HardHat },
   "rider.jacket-worn": { icon: Shirt },
   "rider.jacket-condition": { icon: Shirt },
+  "rider.documents": { icon: FileCheck },
 };

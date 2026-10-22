@@ -31,6 +31,10 @@ At the client's request nothing is pre-filled (`FORM_META.prefillExpectedAnswers
 - Vehicle Details starts blank: Primary Vehicle and Fuel Type start on "Select…", Manufacturer and Model are
   required, and "Do you use a Secondary Vehicle?" starts with neither Yes nor No. Yes opens the secondary vehicle
   fields, which are then all required. Changing the vehicle type clears a fuel choice that no longer fits.
+- **Documents question (last one in Rider Assessment):** "Does the rider have valid 2 wheeler documents? (DL, Insurance &
+  Emission)". Answering **Yes** opens two required date pickers, *Driving licence valid till* and *Insurance valid
+  till* (`followUp` on the question in `lib/form-content.ts`); a date in the past is refused with "If the document has
+  expired, answer No". Dates show on the review and PDF.
 - Flagged answers (anything but the expected one: **No** normally, **Yes** for "sleepy" and "mobile phone") show red
   on the question, the road, the review and the lamps.
 
@@ -72,6 +76,12 @@ The review page posts a flat object to `/api/submit-to-sheets`: `{ "<Sheet headi
 parallel** and sends the email. The entry counts as saved if **either** the Sheet or the hub accepted it, so one
 service being down no longer loses data. For the hub it also sends which answers are flagged (red in the hub) and
 the time.
+
+**The documents question adds three Sheet columns, at the very end** (after the vehicle details, so every existing
+column keeps its position): `Does the rider have valid 2 wheeler documents? (DL, Insurance & Emission)` (value
+`Yes, Remarks: …`), and, only when the answer is Yes, `… — Driving licence valid till` and `… — Insurance valid till`
+(text like `05 Mar 2027`). If the Sheet's Apps Script only fills columns that already have a heading, add those three
+headings to the Sheet; the hub picks the columns up by itself.
 
 **The Sheet contract must not change.** The headings (`sheetLabel` in `lib/form-content.ts`), their order and the
 `"Yes, Remarks: No Remarks"` value format are exactly what the old form sent: `lib/submission.ts → buildPayload` is

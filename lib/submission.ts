@@ -15,7 +15,12 @@ import {
   type YesNo,
 } from "@/lib/form-content";
 
-export type Answer = { answer?: YesNo; remark: string };
+export type Answer = {
+  answer?: YesNo;
+  remark: string;
+  /** Follow-up details (e.g. valid-till dates as YYYY-MM-DD), keyed by follow-up field id. */
+  details?: Record<string, string>;
+};
 
 export type FormState = {
   fields: Record<string, string>;
@@ -27,6 +32,32 @@ export type FormState = {
 export type Errors = Record<string, string>;
 
 export const answerKey = (sectionId: string, questionId: string) => `${sectionId}.${questionId}`;
+export const detailKey = (key: string, fieldId: string) => `${key}.${fieldId}`;
+
+/* ---------------------------------------------------------------- dates */
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Today's date in India, as YYYY-MM-DD (what a date picker gives). */
+export const todayIST = (d = new Date()) => d.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+
+/** A real calendar date in YYYY-MM-DD form (rejects 2026-02-31 and the like). */
+export const isIsoDate = (v: string) => ISO_DATE.test(v) && new Date(`${v}T00:00:00Z`).toISOString().slice(0, 10) === v;
+
+/** "2027-03-05" → "05 Mar 2027". */
+export function formatIsoDate(iso: string) {
+  if (!isIsoDate(iso)) return iso;
+  return new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" });
+}
+
+/** Why a valid-till date can't be accepted, or null. A date in the past means the document has expired. */
+export function validTillProblem(v: string, today: string): string | null {
+  if (!v) return "Pick the date";
+  if (!isIsoDate(v)) return "Pick a valid date";
+  if (v < today) return "This date has passed. If the document has expired, answer No";
+  if (Number(v.slice(0, 4)) > Number(today.slice(0, 4)) + 40) return "Pick a valid date";
+  return null;
+}
 
 /* ---------------------------------------------------------------- steps */
 
@@ -92,14 +123,24 @@ function validateFields(defs: FieldDef[], fields: Record<string, string>, errors
   }
 }
 
-export function validateStep(step: Step, state: FormState): Errors {
+export function validateStep(step: Step, state: FormState, today = todayIST()): Errors {
   const errors: Errors = {};
   if (step.kind === "assessment") {
     if (step.withParticipant) validateFields(PARTICIPANT_FIELDS, state.fields, errors);
     const section = ASSESSMENT_SECTIONS.find((s) => s.id === step.sectionId)!;
     for (const q of section.questions) {
       const key = answerKey(section.id, q.id);
-      if (!state.answers[key]?.answer) errors[key] = "Choose Yes or No";
+      const a = state.answers[key];
+      if (!a?.answer) {
+        errors[key] = "Choose Yes or No";
+        continue;
+      }
+      if (q.followUp && a.answer === q.followUp.when) {
+        for (const f of q.followUp.fields) {
+          const problem = validTillProblem(a.details?.[f.id] ?? "", today);
+          if (problem) errors[detailKey(key, f.id)] = problem;
+        }
+      }
     }
   }
   if (step.kind === "vehicle") {
@@ -109,8 +150,8 @@ export function validateStep(step: Step, state: FormState): Errors {
   return errors;
 }
 
-export function validateAll(state: FormState): Errors {
-  return Object.assign({}, ...STEPS.map((s) => validateStep(s, state)));
+export function validateAll(state: FormState, today = todayIST()): Errors {
+  return Object.assign({}, ...STEPS.map((s) => validateStep(s, state, today)));
 }
 
 /* --------------------------------------------------------------- report */
@@ -127,6 +168,8 @@ export type ReportRow = {
   /** Assessment rows only. */
   remark?: string;
   flagged?: boolean;
+  /** Follow-up details shown under the answer, each with its own Sheet column. */
+  extras?: { label: string; value: string }[];
 };
 export type ReportSection = { title: string; kind: "fields" | "assessment"; rows: ReportRow[] };
 
@@ -152,6 +195,9 @@ export function buildReport(state: FormState, date = new Date()): ReportSection[
             value: a?.answer ?? "Not answered",
             remark: a?.remark.trim() || NO_REMARKS,
             flagged: !!a?.answer && a.answer !== (q.expected ?? "Yes"),
+            ...(q.followUp && a?.answer === q.followUp.when
+              ? { extras: q.followUp.fields.map((f) => ({ label: f.label, value: a.details?.[f.id] ? formatIsoDate(a.details[f.id]) : NOT_PROVIDED })) }
+              : {}),
           };
         }),
       }),
@@ -172,17 +218,36 @@ export const countFlagged = (report: ReportSection[]) => report.reduce((n, s) =>
  * The flat object sent to /api/submit-to-sheets: `{ "<Sheet heading>": "<value>" }`, in the order
  * the Sheet has always had: details, vehicle assessment, rider assessment, vehicle details.
  * Assessment answers look like "Yes, Remarks: No Remarks".
+ *
+ * Questions added later that carry follow-up details (the documents question and its two valid-till
+ * dates) come LAST, after the vehicle details, so every column the Sheet already had keeps its
+ * position even if the Sheet script maps columns by order. The dates are plain text like "05 Mar 2027",
+ * under "<question> — <label>", and only present when the answer was Yes.
  */
 export function buildPayload(state: FormState, date = new Date()): Record<string, string> {
   const out: Record<string, string> = { Date: formatDate(date) };
+  const answerValue = (key: string) => {
+    const a = state.answers[key];
+    return `${a?.answer ?? "Yes"}, Remarks: ${a?.remark.trim() || NO_REMARKS}`;
+  };
   for (const { def, value } of fieldRows(PARTICIPANT_FIELDS, state.fields)) out[def.sheetLabel] = value;
   for (const s of ASSESSMENT_SECTIONS) {
-    for (const q of s.questions) {
-      const a = state.answers[answerKey(s.id, q.id)];
-      out[q.sheetLabel] = `${a?.answer ?? "Yes"}, Remarks: ${a?.remark.trim() || NO_REMARKS}`;
-    }
+    for (const q of s.questions) if (!q.followUp) out[q.sheetLabel] = answerValue(answerKey(s.id, q.id));
   }
   for (const { def, value } of fieldRows(VEHICLE_FIELDS, state.fields)) out[def.sheetLabel] = value;
+  for (const s of ASSESSMENT_SECTIONS) {
+    for (const q of s.questions) {
+      if (!q.followUp) continue;
+      const key = answerKey(s.id, q.id);
+      out[q.sheetLabel] = answerValue(key);
+      if (state.answers[key]?.answer === q.followUp.when) {
+        for (const f of q.followUp.fields) {
+          const v = state.answers[key]?.details?.[f.id];
+          out[`${q.sheetLabel} — ${f.label}`] = v ? formatIsoDate(v) : NOT_PROVIDED;
+        }
+      }
+    }
+  }
   return out;
 }
 

@@ -26,6 +26,12 @@ export type Question = {
   guideline: string;
   /** The answer that means "all good". Anything else is flagged. Defaults to "Yes". */
   expected?: YesNo;
+  /**
+   * Extra details asked only for one answer, shown right under the question (e.g. the documents'
+   * valid-till dates when the answer is Yes). All of them are required then. In the Sheet they get
+   * their own columns, "<question> — <label>", placed after the vehicle details (see buildPayload).
+   */
+  followUp?: { when: YesNo; fields: { id: string; label: string; kind: "date" }[] };
 };
 
 export type AssessmentSection = {
@@ -289,6 +295,19 @@ export const ASSESSMENT_SECTIONS: AssessmentSection[] = [
         text: "Is the jacket in good condition?",
         sheetLabel: "Is the jacket in good condition?",
         guideline: "Check for damages/cuts and verify overall condition. Observe and highlight if the reflective strips are damaged (front and rear).",
+      },
+      {
+        id: "documents",
+        text: "Does the rider have valid 2 wheeler documents? (DL, Insurance & Emission)",
+        sheetLabel: "Does the rider have valid 2 wheeler documents? (DL, Insurance & Emission)",
+        guideline: "Yes or No. Please verify and confirm. If Yes, enter the date each document is valid till.",
+        followUp: {
+          when: "Yes",
+          fields: [
+            { id: "dlValidTill", label: "Driving licence valid till", kind: "date" },
+            { id: "insuranceValidTill", label: "Insurance valid till", kind: "date" },
+          ],
+        },
       },
     ],
   },

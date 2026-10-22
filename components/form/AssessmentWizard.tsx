@@ -12,8 +12,10 @@ import {
   applyFieldChange,
   buildPayload,
   buildReport,
+  detailKey,
   initialState,
   isVisible,
+  todayIST,
   validateStep,
   type Errors,
   type FormState,
@@ -44,6 +46,7 @@ export default function AssessmentWizard() {
   const [nudge, setNudge] = useState({ n: 0, alert: false });
   const [dirty, setDirty] = useState(false);
   const [activeKey, setActiveKey] = useState<string | null>(null);
+  const [today] = useState(todayIST);
   const [restored, setRestored] = useState(false);
   const topRef = useRef<HTMLDivElement>(null);
 
@@ -127,16 +130,25 @@ export default function AssessmentWizard() {
   };
   const setAnswer = (key: string, value: YesNo, expected: YesNo) => {
     const firstTime = !state.answers[key]?.answer;
-    update((s) => ({ ...s, answers: { ...s.answers, [key]: { remark: s.answers[key]?.remark ?? "", answer: value } } }));
+    update((s) => ({ ...s, answers: { ...s.answers, [key]: { ...s.answers[key], remark: s.answers[key]?.remark ?? "", answer: value } } }));
     setNudge((n) => ({ n: n.n + 1, alert: value !== expected }));
     setActiveKey(key);
     clearError(key);
 
     // Guide the line manager through every question: after a first answer, glide to the next unanswered one.
+    // (Not when this answer just opened follow-up boxes, such as the valid-till dates: those need filling here first.)
     const section = ASSESSMENT_SECTIONS.find((s) => key.startsWith(`${s.id}.`));
-    if (!firstTime || !section) return;
+    const q = section?.questions.find((x) => answerKey(section.id, x.id) === key);
+    if (!firstTime || !section || (q?.followUp && q.followUp.when === value)) return;
     const next = section.questions.map((x) => answerKey(section.id, x.id)).find((k) => k !== key && !state.answers[k]?.answer);
     if (next) setTimeout(() => document.getElementById(`q-${next}`)?.scrollIntoView({ behavior: "smooth", block: "center" }), 280);
+  };
+  const setDetail = (key: string, fieldId: string, value: string) => {
+    update((s) => ({
+      ...s,
+      answers: { ...s.answers, [key]: { ...s.answers[key], remark: s.answers[key]?.remark ?? "", details: { ...s.answers[key]?.details, [fieldId]: value } } },
+    }));
+    clearError(detailKey(key, fieldId));
   };
   const setRemark = (key: string, remark: string) => update((s) => ({ ...s, answers: { ...s.answers, [key]: { ...s.answers[key], remark } } }));
 
@@ -146,7 +158,7 @@ export default function AssessmentWizard() {
   };
 
   const goNext = () => {
-    const errs = validateStep(step, state);
+    const errs = validateStep(step, state, today);
     setErrors(errs);
     if (Object.keys(errs).length) {
       // Take them to the first thing still missing: a question with no answer, or a field.
@@ -243,6 +255,9 @@ export default function AssessmentWizard() {
           onActivate={() => setActiveKey(key)}
           onAnswer={(v) => setAnswer(key, v, q.expected ?? "Yes")}
           onRemark={(v) => setRemark(key, v)}
+          onDetail={(fieldId, v) => setDetail(key, fieldId, v)}
+          detailErrors={Object.fromEntries((q.followUp?.fields ?? []).map((f) => [f.id, errors[detailKey(key, f.id)]]))}
+          today={today}
         />
       );
     });

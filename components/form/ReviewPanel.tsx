@@ -13,6 +13,11 @@ export default function ReviewPanel({ report }: { report: ReportSection[] }) {
               <div key={r.label} className="grid gap-1 px-4 py-2.5 text-sm sm:grid-cols-[1fr_8rem] sm:gap-4">
                 <dt className="font-semibold text-[#555]">
                   {r.label}
+                  {r.extras?.map((x) => (
+                    <span key={x.label} className="mt-0.5 block text-xs font-semibold text-black">
+                      {x.label}: {x.value}
+                    </span>
+                  ))}
                   {section.kind === "assessment" && <span className="mt-0.5 block text-xs font-normal italic text-[#777]">Remarks: {r.remark || "No Remarks"}</span>}
                 </dt>
                 <dd className={cn("font-semibold sm:text-right", r.flagged && "text-brake")}>{r.value}</dd>
