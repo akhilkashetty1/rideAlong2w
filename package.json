@@ -6,7 +6,8 @@
     "dev": "next dev -p 3000",
     "build": "next build",
     "start": "next start -p 3000",
-    "lint": "eslint"
+    "lint": "eslint",
+    "sheet-headers": "node scripts/print-sheet-headers.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",

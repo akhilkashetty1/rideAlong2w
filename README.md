@@ -119,3 +119,15 @@ Sheet is being changed on purpose.
 2. Check the Vercel preview URL end to end. **A preview submission goes to the same Google Sheet** unless
    `GOOGLE_SHEET_WEBAPP_URL` is set to something else for the Preview environment.
 3. `ride-along-form.in` is attached under Vercel → Settings → Domains.
+
+## The Google Sheet's heading row
+
+`scripts/sheet-headers.tsv` is the complete heading row (46 columns) as one tab-separated line, and
+`npm run sheet-headers` regenerates it from the current form (add `-- --list` for a numbered list). The first 43 columns are
+the ones the Sheet already has; the documents question adds three at the end (AR, AS, AT). To paste only those three:
+
+```bash
+cut -f44-46 scripts/sheet-headers.tsv | tr -d '\n' | LC_ALL=en_US.UTF-8 pbcopy   # then click AR1 in the Sheet and paste
+```
+
+Use that exact command: without the UTF-8 setting the long dash turns into garbage characters.
