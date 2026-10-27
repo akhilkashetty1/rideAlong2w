@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { emailStats, emailSubject, portalUrlFromIngest, renderEmail, renderEmailText, reportFromPayload, type EmailMeta } from "@/lib/email";
+import { FORM_META } from "@/lib/form-content";
 import { flaggedHeadings } from "@/lib/submission";
 
 /**
@@ -28,9 +30,6 @@ const MAX_BYTES = 200_000;
 
 type FormData = Record<string, unknown>;
 
-const escapeHtml = (s: unknown) =>
-  String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
-
 async function saveToSheet(formData: FormData) {
   const res = await fetch(GOOGLE_SHEET_WEBAPP_URL, {
     method: "POST",
@@ -59,9 +58,16 @@ async function saveToHub(formData: FormData) {
 async function sendEmail(formData: FormData) {
   const apiKey = process.env.BREVO_API_KEY;
   if (!apiKey) return null;
-  const lines = Object.entries(formData)
-    .map(([key, value]) => `<strong>${escapeHtml(key)}:</strong> ${escapeHtml(value)}`)
-    .join("<br>");
+  const sections = reportFromPayload(formData);
+  const { flagged } = emailStats(sections);
+  const name = String(formData.Name ?? "").trim() || "New rider";
+  const hq = String(formData.HQ ?? "").trim();
+  const meta: EmailMeta = {
+    formName: FORM_META.shortTitle,
+    who: hq ? `${name} (${hq})` : name,
+    when: new Date().toLocaleString("en-GB", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" }),
+    portalUrl: portalUrlFromIngest(process.env.HUB_INGEST_URL),
+  };
   const res = await fetch("https://api.brevo.com/v3/smtp/email", {
     method: "POST",
     headers: { accept: "application/json", "api-key": apiKey, "content-type": "application/json" },
@@ -69,8 +75,10 @@ async function sendEmail(formData: FormData) {
       sender: { name: BREVO_SENDER_NAME, email: BREVO_SENDER_EMAIL },
       to: [{ email: ADMIN_EMAIL_PRIMARY }],
       ...(process.env.ADMIN_EMAIL_CC ? { cc: [{ email: process.env.ADMIN_EMAIL_CC }] } : {}),
-      subject: "Form Submission Notification",
-      htmlContent: `<html><body><strong>A new form submission has been received:</strong><br>${lines}</body></html>`,
+      subject: emailSubject(FORM_META.shortTitle, meta.who, flagged),
+      htmlContent: renderEmail(sections, meta),
+      textContent: renderEmailText(sections, meta),
+      tags: ["ride-along", "2w"],
     }),
   });
   if (!res.ok) throw new Error(`Brevo responded ${res.status}: ${await res.text().catch(() => "")}`);
