@@ -15,7 +15,7 @@ export default function Home() {
         priority
         placeholder="blur"
         sizes="(min-width: 1024px) 550px, (min-width: 768px) 450px, 80vw"
-        className="poster-pulse h-auto max-h-[calc(100dvh-23rem)] min-h-[16rem] w-auto max-w-[80vw] rounded-[15px] shadow-[0_8px_16px_rgba(0,0,0,.2)] md:max-w-[450px] lg:max-w-[550px]"
+        className="poster-pulse h-auto max-h-[calc(100dvh-25rem)] min-h-[16rem] w-auto max-w-[80vw] rounded-[15px] shadow-[0_8px_16px_rgba(0,0,0,.2)] md:max-w-[450px] lg:max-w-[550px]"
       />
       <IgnitionButton href="/guidelines/vehicle" />
     </main>

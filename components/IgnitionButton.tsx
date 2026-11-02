@@ -21,23 +21,32 @@ const CAPTIONS: Record<KeyStage, string> = {
   on: "Ignition on",
   crank: "Cranking",
   live: "Engine live",
+  ride: "Let's ride",
 };
 
 /**
- * START ASSESSMENT as a 3D ignition key (a push-to-start button if WebGL is unavailable). Turning
- * the key does what a real bike does on ignition: the gauge needles sweep and every warning lamp lights
- * for a bulb check, then it pulls away to the guidelines. (Black and lime, the cover's own colours.)
+ * START ASSESSMENT as a 3D instrument pod with an ignition key (a push-to-start button if WebGL is
+ * unavailable). The key runs a real bike's start-up (bulb check, crank, catch, idle), then the pod
+ * revs and an iris opens out of it, streaked like a warp, into the guidelines. Without WebGL the
+ * button plays the 2D version: gauge needles sweep and every lamp lights, then it pulls away.
  */
 export default function IgnitionButton({ href }: { href: string }) {
   const router = useRouter();
   const [phase, setPhase] = useState<"off" | "sweep" | "settle">("off");
   const [gl, setGl] = useState<"loading" | "ok" | "none">("loading");
   const [stage, setStage] = useState<KeyStage>("idle");
+  const [ride, setRide] = useState<{ x: number; y: number } | null>(null);
   const keyRef = useRef<IgnitionKeyHandle>(null);
 
   useEffect(() => {
     router.prefetch(href);
   }, [router, href]);
+
+  const pullAway = (origin: { x: number; y: number }) => {
+    if (prefersReducedMotion()) return router.push(href);
+    setRide(origin);
+    setTimeout(() => router.push(href), 700);
+  };
 
   const start = () => {
     if (phase !== "off") return;
@@ -53,10 +62,10 @@ export default function IgnitionButton({ href }: { href: string }) {
   return (
     <>
       <div className="flex flex-col items-center gap-1">
-        <div className="relative h-60 w-60 rounded-full has-[:focus-visible]:ring-4 has-[:focus-visible]:ring-neon sm:h-64 sm:w-64">
+        <div className="relative h-64 w-64 rounded-full has-[:focus-visible]:ring-4 has-[:focus-visible]:ring-neon sm:h-72 sm:w-72">
           <IgnitionKey3D
             ref={keyRef}
-            onStart={start}
+            onRide={pullAway}
             onStage={setStage}
             onReady={(ok) => setGl(ok ? "ok" : "none")}
             className={cn("absolute inset-0 cursor-grab touch-none active:cursor-grabbing", gl !== "ok" && "invisible")}
@@ -90,21 +99,34 @@ export default function IgnitionButton({ href }: { href: string }) {
         {gl === "ok" && (
           <>
             <span className="rounded-full bg-white/85 px-3 py-1 font-display text-base leading-none tracking-wider">START ASSESSMENT</span>
-            {/* keyed so each stage's words slide in fresh; the lime pill marks that the engine is going */}
-            <span
-              key={stage}
-              aria-hidden
-              className={cn(
-                "step-in rounded-full px-2.5 py-0.5 text-[0.65rem] font-semibold uppercase tracking-[0.22em]",
-                stage === "idle" ? "bg-white/85 text-ink-soft" : "bg-neon text-black",
-              )}
-            >
-              {CAPTIONS[stage]}
-              {(stage === "in" || stage === "crank") && "…"}
-            </span>
+            <div className="flex items-center gap-1.5">
+              {/* keyed so each stage's words slide in fresh; the lime pill marks that the engine is going */}
+              <span
+                key={stage}
+                aria-hidden
+                className={cn(
+                  "step-in rounded-full px-2.5 py-0.5 text-[0.65rem] font-semibold uppercase tracking-[0.22em]",
+                  stage === "idle" ? "bg-white/85 text-ink-soft" : "bg-neon text-black",
+                )}
+              >
+                {CAPTIONS[stage]}
+                {(stage === "in" || stage === "crank") && "…"}
+              </span>
+            </div>
           </>
         )}
       </div>
+
+      {ride && (
+        <div className="fixed inset-0 z-50 overflow-hidden" aria-live="polite">
+          <div className="iris-out absolute rounded-full bg-black" style={{ left: ride.x, top: ride.y }}>
+            <div className="warp absolute inset-0 rounded-full" />
+          </div>
+          <p className="warp-text absolute -translate-x-1/2 -translate-y-1/2 whitespace-nowrap font-display text-4xl tracking-wider text-neon sm:text-5xl" style={{ left: ride.x, top: ride.y }}>
+            LET&apos;S RIDE
+          </p>
+        </div>
+      )}
 
       {phase !== "off" && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/90" aria-live="polite">
