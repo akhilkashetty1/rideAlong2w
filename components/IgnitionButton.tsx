@@ -62,7 +62,7 @@ export default function IgnitionButton({ href }: { href: string }) {
   return (
     <>
       <div className="flex flex-col items-center gap-1">
-        <div className="relative h-64 w-64 rounded-full has-[:focus-visible]:ring-4 has-[:focus-visible]:ring-neon sm:h-72 sm:w-72">
+        <div className="relative h-48 w-48 rounded-full has-[:focus-visible]:ring-4 has-[:focus-visible]:ring-neon sm:h-56 sm:w-56">
           <IgnitionKey3D
             ref={keyRef}
             onRide={pullAway}
