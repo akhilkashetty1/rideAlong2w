@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { ArrowLeft, ArrowRight, CircleAlert, Download, Hand, Loader2, Printer, RotateCcw, Send } from "lucide-react";
 import thankYou from "@/public/images/thank-you.jpg";
@@ -10,6 +10,7 @@ import {
   STEPS,
   answerKey,
   applyFieldChange,
+  clearHidden,
   buildPayload,
   buildReport,
   detailKey,
@@ -77,8 +78,13 @@ export default function AssessmentWizard() {
   useEffect(() => {
     try {
       const saved = sessionStorage.getItem(DRAFT_KEY);
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time restore after hydration
-      if (saved) setState({ ...initialState(), ...JSON.parse(saved), confirmed: false });
+      if (saved) {
+        const draft = JSON.parse(saved);
+        const base = initialState();
+        // Fields a draft holds for questions that are not shown are dropped, so they cannot re-appear pre-answered.
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time restore after hydration
+        setState({ ...base, ...draft, fields: clearHidden({ ...base.fields, ...draft.fields }), confirmed: false });
+      }
     } catch {}
     // Saving starts only on the render AFTER this one, when the restored answers are in `state`;
     // saving in the same pass would overwrite the draft with the empty form.
@@ -342,10 +348,16 @@ export default function AssessmentWizard() {
             <>
               <h2 className="mb-3 text-lg font-bold">Vehicle Details</h2>
               <div className="grid gap-4 sm:grid-cols-2">
-                {VEHICLE_FIELDS.filter((f) => isVisible(f, state.fields)).map((f) => (
-                  <div key={f.id} className={cn(f.kind === "radio" && "sm:col-span-2")}>
-                    <FieldInput field={f} fields={state.fields} error={errors[f.id]} onChange={setField} />
-                  </div>
+                {VEHICLE_FIELDS.filter((f) => isVisible(f, state.fields)).map((f, i, shown) => (
+                  <Fragment key={f.id}>
+                    {/* a heading each time a new group of fields starts (this two-wheeler / primary / secondary) */}
+                    {f.group && f.group !== shown[i - 1]?.group && (
+                      <h3 className="mt-2 border-t border-line pt-4 text-xs font-bold uppercase tracking-wider text-ink-soft sm:col-span-2">{f.group}</h3>
+                    )}
+                    <div className={cn(f.kind === "radio" && "sm:col-span-2")}>
+                      <FieldInput field={f} fields={state.fields} error={errors[f.id]} onChange={setField} />
+                    </div>
+                  </Fragment>
                 ))}
               </div>
               <label

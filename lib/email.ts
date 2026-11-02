@@ -4,7 +4,7 @@
  * styles only, because mail apps ignore everything else. Pure functions, no Node or React imports.
  */
 
-import { ASSESSMENT_SECTIONS, PARTICIPANT_FIELDS, VEHICLE_FIELDS } from "@/lib/form-content";
+import { ASSESSMENT_SECTIONS, PARTICIPANT_FIELDS, VEHICLE_EMAIL_COLUMNS } from "@/lib/form-content";
 
 export type EmailRow = {
   label: string;
@@ -184,7 +184,7 @@ export function reportFromPayload(payload: Record<string, unknown>): EmailSectio
     if (rows.length) sections.push({ title: s.title, kind: "assessment", rows });
   }
 
-  const vehicle = rowsOf(VEHICLE_FIELDS);
+  const vehicle = rowsOf(VEHICLE_EMAIL_COLUMNS);
   if (vehicle.length) sections.push({ title: "Vehicle Details", kind: "fields", rows: vehicle });
 
   const other = Object.keys(payload).filter((k) => !used.has(k) && text(k)).map((k) => ({ label: k, value: text(k) }));

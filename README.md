@@ -77,16 +77,36 @@ parallel** and sends the email. The entry counts as saved if **either** the Shee
 service being down no longer loses data. For the hub it also sends which answers are flagged (red in the hub) and
 the time.
 
-**The documents question adds three Sheet columns, at the very end** (after the vehicle details, so every existing
-column keeps its position): `Does the rider have valid 2 wheeler documents? (DL, Insurance & Emission)` (value
-`Yes, Remarks: …`), and, only when the answer is Yes, `… — Driving licence valid till` and `… — Insurance valid till`
-(text like `05 Mar 2027`). If the Sheet's Apps Script only fills columns that already have a heading, add those three
-headings to the Sheet; the hub picks the columns up by itself.
+**The documents question** (the last rider question) has its own Sheet columns, straight after the last other rider
+question and before the vehicle details: `Does the rider have valid 2 wheeler documents? (DL, Insurance & Emission)`
+(value `Yes, Remarks: …`), and, only when the answer is Yes, `… — Driving licence valid till` and
+`… — Insurance valid till` (text like `05 Mar 2027`).
 
-**The Sheet contract must not change.** The headings (`sheetLabel` in `lib/form-content.ts`), their order and the
-`"Yes, Remarks: No Remarks"` value format are exactly what the old form sent: `lib/submission.ts → buildPayload` is
-tested against the old form's own code for 300 random forms (identical keys, order and values), so existing Sheet
-columns and the hub keep lining up. Changing a `sheetLabel` starts a new column.
+**Vehicle details.** This is the two-wheeler form, so it asks "Is this two-wheeler your primary vehicle?" instead of
+asking for the vehicle type.
+
+- **Yes**: this two-wheeler is the primary vehicle; the rider may also have a secondary vehicle (the old question).
+- **No**: this two-wheeler is filed as the secondary vehicle automatically, and the rider is asked whether to add
+  their primary vehicle's details (no secondary question). They can **Skip**: the details may already have been given
+  elsewhere or not apply, and five forced fields would only invite made-up answers. A skip is saved as `Not Provided`
+  in the primary-vehicle columns, never blank.
+
+A field that is not shown is always empty: changing an answer (or restoring a saved draft) clears whatever it hides
+(`clearHidden` in `lib/submission.ts`), so a question that appears later never comes back pre-answered.
+
+The Sheet, hub, e-mail and review always speak of a *primary* and a *secondary* vehicle, under the headings they have
+always had (`Primary Vehicle Number`, `Do you use a secondary vehicle for field of work?`, …; see `VEHICLE_COLUMNS` in
+`lib/form-content.ts`). `lib/submission.ts → resolveVehicles` files each answer under the right one. One column is new,
+`Is this two-wheeler your primary vehicle?`, and says which of the two vehicles was assessed.
+
+Column order of the Sheet: details, vehicle assessment, rider assessment (documents last, with its dates), vehicle
+details. If the Sheet's Apps Script only fills columns that already have a heading, paste the current header row
+(`npm run sheet-headers | pbcopy`) into a new tab, or add the new heading to the existing one; the hub picks
+the columns up by itself.
+
+**The headings and value format are the contract with the Sheet and the hub.** The question headings (`sheetLabel` in
+`lib/form-content.ts`), the vehicle headings (`VEHICLE_COLUMNS`) and the `"Yes, Remarks: No Remarks"` value format must
+not change casually; changing one starts a new column.
 
 ## Project structure
 

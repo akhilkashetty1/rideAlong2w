@@ -10,6 +10,7 @@ import {
   ASSESSMENT_SECTIONS,
   FORM_META,
   PARTICIPANT_FIELDS,
+  VEHICLE_COLUMNS,
   VEHICLE_FIELDS,
   type FieldDef,
   type YesNo,
@@ -86,17 +87,39 @@ export function fieldOptions(field: FieldDef, fields: Record<string, string>): s
 }
 
 export function isVisible(field: FieldDef, fields: Record<string, string>) {
-  return !field.showIf || fields[field.showIf.field] === field.showIf.equals;
+  if (!field.showIf) return true;
+  return [field.showIf].flat().every((c) => fields[c.field] === c.equals);
 }
 
-/** Sets a field and clears any select whose options depend on it and no longer include its value. */
+/**
+ * Empties every field that is not currently shown (and whatever that in turn hides), so a field that appears
+ * later always starts blank. Without this, an answer given earlier (say "Yes" to the secondary-vehicle question,
+ * before switching the primary-vehicle answer or after restoring a saved draft) would silently re-appear
+ * pre-selected the next time the question is revealed.
+ */
+export function clearHidden(fields: Record<string, string>) {
+  let next = fields;
+  for (let pass = 0; pass < 4; pass++) {
+    let changed = false;
+    for (const f of ALL_FIELDS) {
+      if (isVisible(f, next) || !next[f.id]) continue;
+      if (next === fields) next = { ...fields };
+      next[f.id] = "";
+      changed = true;
+    }
+    if (!changed) break;
+  }
+  return next;
+}
+
+/** Sets a field, clears any select whose options depend on it and no longer include its value, and empties whatever it just hid. */
 export function applyFieldChange(fields: Record<string, string>, id: string, value: string) {
   const next = { ...fields, [id]: value };
   for (const f of ALL_FIELDS) {
     if (f.kind !== "select" || Array.isArray(f.options) || f.options.dependsOn !== id) continue;
     if (!fieldOptions(f, next).includes(next[f.id])) next[f.id] = "";
   }
-  return next;
+  return clearHidden(next);
 }
 
 export function initialState(): FormState {
@@ -173,8 +196,55 @@ export type ReportRow = {
 };
 export type ReportSection = { title: string; kind: "fields" | "assessment"; rows: ReportRow[] };
 
-function fieldRows(defs: FieldDef[], fields: Record<string, string>): { def: FieldDef; value: string }[] {
+function fieldRows<T extends FieldDef>(defs: T[], fields: Record<string, string>): { def: T; value: string }[] {
   return defs.filter((f) => isVisible(f, fields)).map((f) => ({ def: f, value: (fields[f.id] ?? "").trim() || NOT_PROVIDED }));
+}
+
+/* ------------------------------------------------------------- vehicles */
+
+type VehicleInfo = { type: string; fuel: string; number: string; make: string; model: string };
+
+/**
+ * Which vehicle is "primary" and which is "secondary", however the rider answered.
+ *
+ *  - "Is this two-wheeler your primary vehicle?" Yes: this two-wheeler is the primary; the optional
+ *    secondary vehicle comes from the secondary questions.
+ *  - No: this two-wheeler is the secondary vehicle (no need to ask), and the primary vehicle comes from
+ *    the "Your primary vehicle" questions, unless they skipped those.
+ */
+export function resolveVehicles(f: Record<string, string>): {
+  thisIsPrimary: "Yes" | "No" | "";
+  primary: VehicleInfo;
+  secondary: VehicleInfo | null;
+} {
+  const thisVehicle: VehicleInfo = { type: "2 Wheeler", fuel: f.vehicleFuel, number: f.vehicleNumber, make: f.vehicleManufacturer, model: f.vehicleModel };
+  const primaryNamed: VehicleInfo = { type: f.primaryVehicle, fuel: f.fuelType, number: f.primaryVehicleNumber, make: f.primaryVehicleManufacturer, model: f.primaryVehicleModel };
+  const secondaryNamed: VehicleInfo = {
+    type: f.secondaryVehicle,
+    fuel: f.secondaryVehicleFuelType,
+    number: f.secondaryVehicleNumber,
+    make: f.secondaryVehicleManufacturer,
+    model: f.secondaryVehicleModel,
+  };
+  const secondary = f.useSecondaryVehicle === "Yes" ? secondaryNamed : null;
+  if (f.isPrimary === "Yes") return { thisIsPrimary: "Yes", primary: thisVehicle, secondary };
+  if (f.isPrimary === "No") {
+    // "Skip" = the rider chose not to give the primary vehicle's details: they are reported as "Not Provided".
+    const none: VehicleInfo = { type: "", fuel: "", number: "", make: "", model: "" };
+    return { thisIsPrimary: "No", primary: f.addPrimary === "Skip" ? none : primaryNamed, secondary: thisVehicle };
+  }
+  return { thisIsPrimary: "", primary: primaryNamed, secondary };
+}
+
+/** The vehicle rows (label, Sheet heading, value), in the order of the Sheet: used by the review and the payload. */
+export function vehicleEntries(f: Record<string, string>): { label: string; sheetLabel: string; value: string }[] {
+  const { thisIsPrimary, primary, secondary } = resolveVehicles(f);
+  const out: { label: string; sheetLabel: string; value: string }[] = [];
+  if (thisIsPrimary) out.push({ ...VEHICLE_COLUMNS.isPrimary, value: thisIsPrimary });
+  for (const c of VEHICLE_COLUMNS.primary) out.push({ label: c.label, sheetLabel: c.sheetLabel, value: primary[c.key].trim() || NOT_PROVIDED });
+  out.push({ ...VEHICLE_COLUMNS.useSecondary, value: secondary ? "Yes" : "No" });
+  if (secondary) for (const c of VEHICLE_COLUMNS.secondary) out.push({ label: c.label, sheetLabel: c.sheetLabel, value: secondary[c.key].trim() || NOT_PROVIDED });
+  return out;
 }
 
 export function buildReport(state: FormState, date = new Date()): ReportSection[] {
@@ -205,7 +275,7 @@ export function buildReport(state: FormState, date = new Date()): ReportSection[
     {
       title: "Vehicle Details",
       kind: "fields",
-      rows: fieldRows(VEHICLE_FIELDS, state.fields).map(({ def, value }) => ({ label: def.label, value })),
+      rows: vehicleEntries(state.fields).map(({ label, value }) => ({ label, value })),
     },
   ];
 }
@@ -215,14 +285,14 @@ export const countFlagged = (report: ReportSection[]) => report.reduce((n, s) =>
 /* -------------------------------------------------------------- payload */
 
 /**
- * The flat object sent to /api/submit-to-sheets: `{ "<Sheet heading>": "<value>" }`, in the order
- * the Sheet has always had: details, vehicle assessment, rider assessment, vehicle details.
- * Assessment answers look like "Yes, Remarks: No Remarks".
+ * The flat object sent to /api/submit-to-sheets: `{ "<Sheet heading>": "<value>" }`, in the order of the
+ * Sheet: details, vehicle assessment, rider assessment, vehicle details. Assessment answers look like
+ * "Yes, Remarks: No Remarks".
  *
- * Questions added later that carry follow-up details (the documents question and its two valid-till
- * dates) come LAST, after the vehicle details, so every column the Sheet already had keeps its
- * position even if the Sheet script maps columns by order. The dates are plain text like "05 Mar 2027",
- * under "<question> — <label>", and only present when the answer was Yes.
+ * The documents question (the last rider question) carries two follow-up dates, which sit in their own columns
+ * straight after it, as plain text like "05 Mar 2027", under "<question> — <label>", and only when the
+ * answer was Yes. The vehicle details come last: the primary and secondary vehicle under the headings the
+ * Sheet has always had, plus "Is this two-wheeler your primary vehicle?".
  */
 export function buildPayload(state: FormState, date = new Date()): Record<string, string> {
   const out: Record<string, string> = { Date: formatDate(date) };
@@ -232,15 +302,10 @@ export function buildPayload(state: FormState, date = new Date()): Record<string
   };
   for (const { def, value } of fieldRows(PARTICIPANT_FIELDS, state.fields)) out[def.sheetLabel] = value;
   for (const s of ASSESSMENT_SECTIONS) {
-    for (const q of s.questions) if (!q.followUp) out[q.sheetLabel] = answerValue(answerKey(s.id, q.id));
-  }
-  for (const { def, value } of fieldRows(VEHICLE_FIELDS, state.fields)) out[def.sheetLabel] = value;
-  for (const s of ASSESSMENT_SECTIONS) {
     for (const q of s.questions) {
-      if (!q.followUp) continue;
       const key = answerKey(s.id, q.id);
       out[q.sheetLabel] = answerValue(key);
-      if (state.answers[key]?.answer === q.followUp.when) {
+      if (q.followUp && state.answers[key]?.answer === q.followUp.when) {
         for (const f of q.followUp.fields) {
           const v = state.answers[key]?.details?.[f.id];
           out[`${q.sheetLabel} — ${f.label}`] = v ? formatIsoDate(v) : NOT_PROVIDED;
@@ -248,6 +313,7 @@ export function buildPayload(state: FormState, date = new Date()): Record<string
       }
     }
   }
+  for (const { sheetLabel, value } of vehicleEntries(state.fields)) out[sheetLabel] = value;
   return out;
 }
 

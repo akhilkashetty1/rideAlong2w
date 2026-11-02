@@ -29,7 +29,7 @@ export type Question = {
   /**
    * Extra details asked only for one answer, shown right under the question (e.g. the documents'
    * valid-till dates when the answer is Yes). All of them are required then. In the Sheet they get
-   * their own columns, "<question> — <label>", placed after the vehicle details (see buildPayload).
+   * their own columns, "<question> — <label>", right after the question (see buildPayload).
    */
   followUp?: { when: YesNo; fields: { id: string; label: string; kind: "date" }[] };
 };
@@ -49,20 +49,28 @@ export type AssessmentSection = {
   questions: Question[];
 };
 
+/** A field shows only while another field holds this value. */
+export type Condition = { field: string; equals: string };
+
 type FieldBase = {
   id: string;
   label: string;
-  /** The Sheet / hub column heading. Do not change casually. */
-  sheetLabel: string;
+  /** The Sheet / hub column heading, for fields that map straight onto one (the participant details). Do not change casually. */
+  sheetLabel?: string;
   required?: boolean;
-  /** Only show (and only validate / send) when another field has this value. */
-  showIf?: { field: string; equals: string };
+  /** Only show (and only validate / send) when these conditions all hold. */
+  showIf?: Condition | Condition[];
+  /** A small heading shown above this field when it starts a new group of fields. */
+  group?: string;
 };
 
 export type FieldDef =
   | (FieldBase & { kind: "text"; placeholder?: string; maxLength?: number })
   | (FieldBase & { kind: "select"; options: string[] | { dependsOn: string; map: Record<string, string[]> } })
-  | (FieldBase & { kind: "radio"; options: string[] });
+  | (FieldBase & { kind: "radio"; options: string[]; /** A line shown under the question for a chosen answer. */ notes?: Record<string, string> });
+
+/** A field that has its own Sheet column. */
+export type SheetField = FieldDef & { sheetLabel: string };
 
 export const FORM_META = {
   title: "Two Wheeler Ride Along Form",
@@ -79,7 +87,7 @@ export const FORM_META = {
 };
 
 /** Asked at the top of the first step. */
-export const PARTICIPANT_FIELDS: FieldDef[] = [
+export const PARTICIPANT_FIELDS: SheetField[] = [
   { kind: "text", id: "hq", label: "HQ", sheetLabel: "HQ", required: true, maxLength: 80 },
   { kind: "text", id: "name", label: "Name", sheetLabel: "Name", required: true, maxLength: 80 },
   { kind: "text", id: "team", label: "Team", sheetLabel: "Team", required: true, maxLength: 80 },
@@ -313,111 +321,128 @@ export const ASSESSMENT_SECTIONS: AssessmentSection[] = [
   },
 ];
 
-/** Final step: the vehicle on record, plus an optional secondary vehicle. */
+/**
+ * Final step: the vehicle on record. This is the two-wheeler form, so the vehicle in front of us is a
+ * two-wheeler: we ask whether it is the rider's primary vehicle.
+ *
+ *  - Yes: it is the primary vehicle; the rider may also have a secondary vehicle for field work.
+ *  - No:  it is recorded as the secondary vehicle automatically, and we ask whether the rider wants to add their
+ *         primary vehicle's details (no separate "secondary vehicle?" question; that is already answered).
+ *         They may skip: the details can be redundant (already given in another form) or not applicable, and
+ *         forcing five mandatory fields there would only invite made-up answers. A skip is recorded as
+ *         "Not Provided", never left blank.
+ *
+ * The Sheet, hub, e-mail and review always speak of "Primary" and "Secondary" vehicles, under the same
+ * headings as ever (VEHICLE_COLUMNS). submission.ts files these answers under the right one.
+ */
 const FUEL_BY_VEHICLE: Record<string, string[]> = {
   "2 Wheeler": ["Petrol", "EV"],
   "4 Wheeler": ["Petrol", "Diesel", "EV"],
 };
 
-const ifSecondary = { field: "useSecondaryVehicle", equals: "Yes" };
+const isPrimary: Condition = { field: "isPrimary", equals: "Yes" };
+const notPrimary: Condition = { field: "isPrimary", equals: "No" };
+const addsPrimary: Condition = { field: "addPrimary", equals: "Yes" };
+const hasSecondary: Condition = { field: "useSecondaryVehicle", equals: "Yes" };
 
 export const VEHICLE_FIELDS: FieldDef[] = [
   {
-    kind: "select",
-    id: "primaryVehicle",
-    label: "Primary Vehicle",
-    sheetLabel: "Primary Vehicle",
+    kind: "radio",
+    id: "isPrimary",
+    label: "Is this two-wheeler your primary vehicle?",
     required: true,
-    options: ["2 Wheeler", "4 Wheeler"],
+    options: ["Yes", "No"],
+    notes: {
+      No: "No problem. We'll record this two-wheeler as your secondary vehicle.",
+    },
   },
+
+  // This two-wheeler: always asked.
+  { kind: "select", id: "vehicleFuel", label: "Vehicle Fuel Type", required: true, options: FUEL_BY_VEHICLE["2 Wheeler"], group: "This two-wheeler" },
+  { kind: "text", id: "vehicleNumber", label: "Vehicle Number", required: true, maxLength: 20, placeholder: "e.g. KA01AB1234", group: "This two-wheeler" },
+  { kind: "text", id: "vehicleManufacturer", label: "Manufacturer", required: true, maxLength: 60, placeholder: "e.g. Honda", group: "This two-wheeler" },
+  { kind: "text", id: "vehicleModel", label: "Model", required: true, maxLength: 60, placeholder: "e.g. Activa", group: "This two-wheeler" },
+
+  // "No": this is the secondary vehicle. Offer to add the primary one (skippable).
+  {
+    kind: "radio",
+    id: "addPrimary",
+    label: "Would you like to add your primary vehicle's details?",
+    required: true,
+    options: ["Yes", "Skip"],
+    showIf: notPrimary,
+    group: "Your primary vehicle",
+    notes: { Skip: "That's fine. We'll mark your primary vehicle as “Not Provided”." },
+  },
+  { kind: "select", id: "primaryVehicle", label: "Primary Vehicle Type", required: true, options: ["2 Wheeler", "4 Wheeler"], showIf: [notPrimary, addsPrimary], group: "Your primary vehicle" },
   {
     kind: "select",
     id: "fuelType",
     label: "Primary Vehicle Fuel Type",
-    sheetLabel: "Primary Vehicle Fuel Type",
     required: true,
     options: { dependsOn: "primaryVehicle", map: FUEL_BY_VEHICLE },
+    showIf: [notPrimary, addsPrimary],
+    group: "Your primary vehicle",
   },
-  {
-    kind: "text",
-    id: "primaryVehicleNumber",
-    label: "Vehicle Number",
-    sheetLabel: "Primary Vehicle Number",
-    required: true,
-    maxLength: 20,
-    placeholder: "e.g. KA01AB1234",
-  },
-  {
-    kind: "text",
-    id: "primaryVehicleManufacturer",
-    label: "Manufacturer",
-    sheetLabel: "Primary Vehicle Manufacturer",
-    required: true,
-    maxLength: 60,
-    placeholder: "e.g. Honda",
-  },
-  {
-    kind: "text",
-    id: "primaryVehicleModel",
-    label: "Model",
-    sheetLabel: "Primary Vehicle Model",
-    required: true,
-    maxLength: 60,
-    placeholder: "e.g. Activa",
-  },
+  { kind: "text", id: "primaryVehicleNumber", label: "Primary Vehicle Number", required: true, maxLength: 20, placeholder: "e.g. KA01AB1234", showIf: [notPrimary, addsPrimary], group: "Your primary vehicle" },
+  { kind: "text", id: "primaryVehicleManufacturer", label: "Primary Vehicle Manufacturer", required: true, maxLength: 60, showIf: [notPrimary, addsPrimary], group: "Your primary vehicle" },
+  { kind: "text", id: "primaryVehicleModel", label: "Primary Vehicle Model", required: true, maxLength: 60, showIf: [notPrimary, addsPrimary], group: "Your primary vehicle" },
+
+  // "Yes": this is the primary vehicle; there may also be a secondary one.
   {
     kind: "radio",
     id: "useSecondaryVehicle",
     label: "Do you use a Secondary Vehicle for field work?",
-    sheetLabel: "Do you use a secondary vehicle for field of work?",
     required: true,
     options: ["Yes", "No"],
+    showIf: isPrimary,
+    group: "Secondary vehicle",
   },
-  {
-    kind: "select",
-    id: "secondaryVehicle",
-    label: "Secondary Vehicle",
-    sheetLabel: "Secondary Vehicle",
-    required: true,
-    options: ["2 Wheeler", "4 Wheeler"],
-    showIf: ifSecondary,
-  },
+  { kind: "select", id: "secondaryVehicle", label: "Secondary Vehicle", required: true, options: ["2 Wheeler", "4 Wheeler"], showIf: [isPrimary, hasSecondary], group: "Secondary vehicle" },
   {
     kind: "select",
     id: "secondaryVehicleFuelType",
     label: "Secondary Vehicle Fuel Type",
-    sheetLabel: "Secondary Vehicle Fuel Type",
     required: true,
     options: { dependsOn: "secondaryVehicle", map: FUEL_BY_VEHICLE },
-    showIf: ifSecondary,
+    showIf: [isPrimary, hasSecondary],
+    group: "Secondary vehicle",
   },
-  {
-    kind: "text",
-    id: "secondaryVehicleNumber",
-    label: "Secondary Vehicle Number",
-    sheetLabel: "Secondary Vehicle Number",
-    required: true,
-    maxLength: 20,
-    showIf: ifSecondary,
-  },
-  {
-    kind: "text",
-    id: "secondaryVehicleManufacturer",
-    label: "Secondary Manufacturer",
-    sheetLabel: "Secondary Vehicle Manufacturer",
-    required: true,
-    maxLength: 60,
-    showIf: ifSecondary,
-  },
-  {
-    kind: "text",
-    id: "secondaryVehicleModel",
-    label: "Secondary Model",
-    sheetLabel: "Secondary Vehicle Model",
-    required: true,
-    maxLength: 60,
-    showIf: ifSecondary,
-  },
+  { kind: "text", id: "secondaryVehicleNumber", label: "Secondary Vehicle Number", required: true, maxLength: 20, showIf: [isPrimary, hasSecondary], group: "Secondary vehicle" },
+  { kind: "text", id: "secondaryVehicleManufacturer", label: "Secondary Manufacturer", required: true, maxLength: 60, showIf: [isPrimary, hasSecondary], group: "Secondary vehicle" },
+  { kind: "text", id: "secondaryVehicleModel", label: "Secondary Model", required: true, maxLength: 60, showIf: [isPrimary, hasSecondary], group: "Secondary vehicle" },
+];
+
+/**
+ * The vehicle columns of the Sheet, hub, e-mail and review, in order. `sheetLabel`s of the primary and secondary
+ * vehicle are the headings the Sheet has always had (the hub reads "Primary Vehicle Number"); only
+ * "Is this two-wheeler your primary vehicle?" is new, and says which of the two vehicles was assessed.
+ */
+export const VEHICLE_COLUMNS = {
+  isPrimary: { label: "Is this two-wheeler your primary vehicle?", sheetLabel: "Is this two-wheeler your primary vehicle?" },
+  primary: [
+    { key: "type", label: "Primary Vehicle", sheetLabel: "Primary Vehicle" },
+    { key: "fuel", label: "Primary Vehicle Fuel Type", sheetLabel: "Primary Vehicle Fuel Type" },
+    { key: "number", label: "Primary Vehicle Number", sheetLabel: "Primary Vehicle Number" },
+    { key: "make", label: "Primary Vehicle Manufacturer", sheetLabel: "Primary Vehicle Manufacturer" },
+    { key: "model", label: "Primary Vehicle Model", sheetLabel: "Primary Vehicle Model" },
+  ],
+  useSecondary: { label: "Do you use a Secondary Vehicle for field work?", sheetLabel: "Do you use a secondary vehicle for field of work?" },
+  secondary: [
+    { key: "type", label: "Secondary Vehicle", sheetLabel: "Secondary Vehicle" },
+    { key: "fuel", label: "Secondary Vehicle Fuel Type", sheetLabel: "Secondary Vehicle Fuel Type" },
+    { key: "number", label: "Secondary Vehicle Number", sheetLabel: "Secondary Vehicle Number" },
+    { key: "make", label: "Secondary Vehicle Manufacturer", sheetLabel: "Secondary Vehicle Manufacturer" },
+    { key: "model", label: "Secondary Vehicle Model", sheetLabel: "Secondary Vehicle Model" },
+  ],
+} as const;
+
+/** The same columns as a flat list (what the e-mail reads from the payload). */
+export const VEHICLE_EMAIL_COLUMNS: { label: string; sheetLabel: string }[] = [
+  VEHICLE_COLUMNS.isPrimary,
+  ...VEHICLE_COLUMNS.primary,
+  VEHICLE_COLUMNS.useSecondary,
+  ...VEHICLE_COLUMNS.secondary,
 ];
 
 /** Sheet headings of the questions whose "all good" answer is No (e.g. "Is the rider sleepy?"). */

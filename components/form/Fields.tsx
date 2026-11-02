@@ -60,6 +60,12 @@ export function FieldInput({
             </label>
           ))}
         </div>
+        {field.notes?.[value] && (
+          <p role="status" className="mt-2 flex items-start gap-1.5 rounded-lg bg-paper-2 px-3 py-2 text-xs leading-relaxed text-ink-soft">
+            <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            {field.notes[value]}
+          </p>
+        )}
         <ErrorText id={errId}>{error}</ErrorText>
       </fieldset>
     );
