@@ -38,6 +38,14 @@ At the client's request nothing is pre-filled (`FORM_META.prefillExpectedAnswers
 - Flagged answers (anything but the expected one: **No** normally, **Yes** for "sleepy" and "mobile phone") show red
   on the question, the road, the review and the lamps.
 
+## Closing the form from the hub
+
+An admin can close this form in the submissions hub (Forms). Then every page shows a "Submissions have ended" screen
+(`components/ClosedScreen.tsx`) and `POST /api/submit-to-sheets` answers 403 `closed`; a rider part-way through keeps their answers and can
+submit once the form is open again. `lib/form-gate.ts` asks the hub at `<HUB_INGEST_URL origin>/api/form-status/2w`
+(cached 10 s for page loads, fresh on submit). If the hub can't be reached the form stays open. Uses the existing
+`HUB_INGEST_URL`; nothing new to configure.
+
 ## Tech stack
 
 | | |

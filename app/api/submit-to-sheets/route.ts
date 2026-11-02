@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { emailStats, emailSubject, portalUrlFromIngest, renderEmail, renderEmailText, reportFromPayload, type EmailMeta } from "@/lib/email";
 import { FORM_META } from "@/lib/form-content";
+import { formGate } from "@/lib/form-gate";
 import { flaggedHeadings } from "@/lib/submission";
 
 /**
@@ -86,6 +87,10 @@ async function sendEmail(formData: FormData) {
 }
 
 export async function POST(request: Request) {
+  // Closed from the hub (Forms): refuse, and tell the form so it can show the closed screen and keep the answers.
+  const gate = await formGate({ fresh: true });
+  if (!gate.open) return NextResponse.json({ error: "closed", closed: { title: gate.title, message: gate.message } }, { status: 403 });
+
   const raw = await request.text();
   if (raw.length > MAX_BYTES) return NextResponse.json({ error: "Submission too large" }, { status: 413 });
 

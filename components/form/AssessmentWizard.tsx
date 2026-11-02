@@ -3,6 +3,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { ArrowLeft, ArrowRight, CircleAlert, Download, Hand, Loader2, Printer, RotateCcw, Send } from "lucide-react";
+import ClosedScreen from "@/components/ClosedScreen";
 import thankYou from "@/public/images/thank-you.jpg";
 import { ASSESSMENT_SECTIONS, FORM_META, PARTICIPANT_FIELDS, VEHICLE_FIELDS, type AssessmentSection, type YesNo } from "@/lib/form-content";
 import { QUESTION_VISUALS } from "@/lib/question-visuals";
@@ -44,6 +45,7 @@ export default function AssessmentWizard() {
   const [done, setDone] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [closed, setClosed] = useState<{ title: string; message: string } | null>(null);
   const [nudge, setNudge] = useState({ n: 0, alert: false });
   const [dirty, setDirty] = useState(false);
   const [activeKey, setActiveKey] = useState<string | null>(null);
@@ -194,6 +196,11 @@ export default function AssessmentWizard() {
         body: JSON.stringify(buildPayload(state)),
       });
       const body = await res.json().catch(() => ({}));
+      if (res.status === 403 && body.error === "closed") {
+        // An admin closed the form while they were filling it in: their answers stay in this page and in the draft.
+        setClosed(body.closed ?? { title: "", message: "" });
+        return;
+      }
       if (!res.ok || body.result !== "success") {
         throw new Error(
           res.status >= 500
@@ -223,6 +230,8 @@ export default function AssessmentWizard() {
     setStepIndex(0);
     setDone(false);
   };
+
+  if (closed) return <ClosedScreen title={closed.title} message={closed.message} keepsAnswers onReopened={() => setClosed(null)} />;
 
   if (done) {
     return (
